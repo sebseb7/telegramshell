@@ -129,8 +129,37 @@ void bot_flush(app_t *app) {
         return;
     }
 
+    size_t send_len = b->len;
+    while (send_len > 0 && ((unsigned char)b->buf[send_len - 1] & 0xC0) == 0x80) {
+        send_len--;
+    }
+    if (send_len > 0 && ((unsigned char)b->buf[send_len - 1] & 0x80) != 0) {
+        unsigned char sb = b->buf[send_len - 1];
+        int needed = 0;
+        if ((sb & 0xE0) == 0xC0) needed = 1;
+        else if ((sb & 0xF0) == 0xE0) needed = 2;
+        else if ((sb & 0xF8) == 0xF0) needed = 3;
+        
+        if (needed > 0 && (b->len - send_len) < (size_t)needed) {
+            send_len--; 
+        } else {
+            send_len = b->len;
+        }
+    }
+
+    if (send_len == 0) return;
+
+    char temp = b->buf[send_len];
+    b->buf[send_len] = '\0';
     telegram_send_message(&app->tg, app->last_chat_id, b->buf, 1, NULL, NULL);
-    b->len = 0;
+    b->buf[send_len] = temp;
+    
+    size_t remaining = b->len - send_len;
+    if (remaining > 0) {
+        memmove(b->buf, b->buf + send_len, remaining);
+    }
+    b->len = remaining;
+    b->buf[b->len] = '\0';
 }
 
 void bot_handle_message(app_t *app, const char *chat_id, const char *text) {

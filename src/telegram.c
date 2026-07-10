@@ -438,8 +438,15 @@ void telegram_send_message(telegram_ctx_t *tg, const char *chat_id,
             end = elen;
         } else {
             size_t e = end;
-            while (e > i && esc[e] != '&')
+            /* Avoid splitting UTF-8 characters */
+            while (e > i && ((unsigned char)esc[e] & 0xC0) == 0x80)
                 e--;
+            /* Avoid splitting HTML entities */
+            size_t he = e;
+            while (he > i && esc[he] != '&' && esc[he] != ';' && (e - he) < 10)
+                he--;
+            if (he > i && esc[he] == '&')
+                e = he;
             end = (e == i) ? i + MAX : e;
         }
         size_t clen = end - i;

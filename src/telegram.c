@@ -180,6 +180,7 @@ static void telegram_poll_cb(curl_req_t *req, CURLcode code, long http_code,
 typedef struct send_ctx_s {
     void (*cb)(void *, int);
     void *ud;
+    void *free_ptr;
 } send_ctx_t;
 
 static void telegram_send_cb(curl_req_t *req, CURLcode code, long http_code,
@@ -191,6 +192,8 @@ static void telegram_send_cb(curl_req_t *req, CURLcode code, long http_code,
     send_ctx_t *sc = (send_ctx_t *)ud;
     if (sc->cb)
         sc->cb(sc->ud, (int)code);
+    if (sc->free_ptr)
+        free(sc->free_ptr);
     free(sc);
 }
 
@@ -343,6 +346,7 @@ void telegram_send_document(telegram_ctx_t *tg, const char *chat_id,
     send_ctx_t *sc = (send_ctx_t *)malloc(sizeof(*sc));
     sc->cb = cb;
     sc->ud = ud;
+    sc->free_ptr = NULL;
 
     curl_uv_request_mime(tg->cu, url, build_doc_mime, &d, telegram_send_cb, sc);
     free(url);
@@ -390,6 +394,7 @@ static void send_one(telegram_ctx_t *tg, const char *chat_id,
     send_ctx_t *sc = (send_ctx_t *)malloc(sizeof(*sc));
     sc->cb = cb;
     sc->ud = ud;
+    sc->free_ptr = NULL;
 
     curl_uv_request(tg->cu, url, post, NULL, telegram_send_cb, sc);
 
@@ -468,6 +473,8 @@ void telegram_set_commands(telegram_ctx_t *tg) {
     const char *json =
         "[{\"command\":\"start\",\"description\":\"Show usage instructions\"},"
          "{\"command\":\"restart\",\"description\":\"Restart the shell session\"},"
+         "{\"command\":\"image_on\",\"description\":\"Enable Color Shell Mode\"},"
+         "{\"command\":\"image_off\",\"description\":\"Disable Color Shell Mode\"},"
          "{\"command\":\"ctrl_c\",\"description\":\"Send Ctrl-C (SIGINT) to the shell\"},"
          "{\"command\":\"ctrl_z\",\"description\":\"Send Ctrl-Z (SIGTSTP) to the shell\"}]";
     char *enc = urlencode(json);
@@ -478,10 +485,48 @@ void telegram_set_commands(telegram_ctx_t *tg) {
     send_ctx_t *sc = (send_ctx_t *)malloc(sizeof(*sc));
     sc->cb = NULL;
     sc->ud = NULL;
+    sc->free_ptr = NULL;
 
     curl_uv_request(tg->cu, url, post, NULL, telegram_send_cb, sc);
 
     free(url);
     free(enc);
     free(post);
+}
+
+typedef struct send_photo_s {
+    const char *chat_id;
+    const unsigned char *data;
+    size_t size;
+} send_photo_t;
+
+static void build_photo_mime(curl_mime *mime, void *ud) {
+    send_photo_t *p = (send_photo_t *)ud;
+    curl_mimepart *part;
+    
+    part = curl_mime_addpart(mime);
+    curl_mime_name(part, "chat_id");
+    curl_mime_data(part, p->chat_id, CURL_ZERO_TERMINATED);
+    
+    part = curl_mime_addpart(mime);
+    curl_mime_name(part, "photo");
+    curl_mime_filename(part, "shell.jpg");
+    curl_mime_type(part, "image/jpeg");
+    curl_mime_data(part, (const char *)p->data, p->size);
+}
+
+void telegram_send_photo(telegram_ctx_t *tg, const char *chat_id,
+                         const unsigned char *jpeg_data, size_t jpeg_size,
+                         void (*cb)(void *, int), void *ud) {
+    char *url = (char *)malloc(strlen(tg->api_base) + 16);
+    snprintf(url, strlen(tg->api_base) + 16, "%ssendPhoto", tg->api_base);
+
+    send_photo_t p = {chat_id, jpeg_data, jpeg_size};
+    send_ctx_t *sc = (send_ctx_t *)malloc(sizeof(*sc));
+    sc->cb = cb;
+    sc->ud = ud;
+    sc->free_ptr = (void *)jpeg_data; // Will be freed when request finishes
+
+    curl_uv_request_mime(tg->cu, url, build_photo_mime, &p, telegram_send_cb, sc);
+    free(url);
 }

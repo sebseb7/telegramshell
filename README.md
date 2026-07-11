@@ -22,7 +22,7 @@ make
 
 (CMake is also supported: `mkdir build && cd build && cmake .. && make`.)
 
-Dependencies (Debian/Ubuntu): `libuv1-dev`, `libcurl4-openssl-dev`, `libssl-dev`, `libqrencode-dev`, and the
+Dependencies (Debian/Ubuntu): `libuv1-dev`, `libcurl4-openssl-dev`, `libssl-dev`, `libqrencode-dev`, `libjpeg-dev`, and the
 `libutil` that ships with glibc. `yyjson` is vendored under `vendor/yyjson`.
 
 ## Systemd Service
@@ -81,6 +81,8 @@ Send messages to the bot in Telegram:
 - `sudo echo hi` — prompts for the password in Telegram; type it and send.
 - `/start` — shows usage instructions.
 - `/restart` — restarts the shell session.
+- `/image_on` — enables Color Shell Mode (renders terminal as a JPEG image).
+- `/image_off` — disables Color Shell Mode.
 - `/ctrl_c` — sends Ctrl-C (SIGINT) to the foreground process in the shell.
 - `/ctrl_z` — sends Ctrl-Z (SIGTSTP) to the foreground process in the shell.
 - Send a **file** (document or photo) to the bot — it is downloaded and saved
@@ -93,6 +95,10 @@ Shell output is coalesced with a 300 ms debounce timer, HTML-escaped, and
 sent with `parse_mode=HTML` wrapped in `<pre>` code blocks. Long output (e.g.
 `cat /etc/services`) is split across multiple ≤4080-char messages; rapid output
 (e.g. `for i in $(seq 1 100); do echo $i; done`) arrives as one or few messages.
+
+### Color Shell Mode
+
+By default, the bot strips all ANSI escape codes and streams output as plain text. However, if you enable Color Shell Mode using `/image_on`, the bot utilizes an embedded VT100 terminal emulator to render your shell output (including colors, ANSI formatting, and box-drawing characters) into a JPEG image that is sent directly to Telegram. The virtual screen supports up to 150 columns and automatically scrolls to capture the last 100 rows of output. Toggling this mode automatically restarts your shell to set `TERM=xterm-256color`.
 
 > [!NOTE]
 > PTY echo is disabled, so typed commands and passwords are **not** reflected
@@ -117,6 +123,7 @@ telegramshell/
 │   ├── telegram.c/.h   # getUpdates / sendMessage / setMyCommands
 │   ├── shell.c/.h      # PTY allocation, fork+exec bash, I/O
 │   ├── bot.c/.h        # message dispatch, output buffering, /restart
+│   ├── render.c/.h     # VT100 emulator and JPEG rendering
 │   └── totp.c/.h       # 2FA TOTP verification
 ├── vendor/yyjson/      # vendored JSON parser
 ├── install-service.sh  # script to install as systemd user service

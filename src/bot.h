@@ -13,6 +13,7 @@ typedef struct bot_ctx_s {
     uv_timer_t debounce;
     int debounce_active;
     int strip_state;
+    struct vterm_s *vt;
 } bot_ctx_t;
 
 void bot_init(bot_ctx_t *b, app_t *app);

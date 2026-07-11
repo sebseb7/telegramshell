@@ -57,7 +57,12 @@ void shell_start(shell_ctx_t *s) {
             tcsetattr(slave, TCSANOW, &t);
         }
 
-        setenv("TERM", "dumb", 1);
+        if (s->app->image_mode) {
+            setenv("TERM", "xterm-256color", 1);
+            setenv("COLORTERM", "truecolor", 1);
+        } else {
+            setenv("TERM", "dumb", 1);
+        }
 
         const char *home = getenv("HOME");
         if (home) {

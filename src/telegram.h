@@ -33,4 +33,8 @@ void telegram_send_document(telegram_ctx_t *tg, const char *chat_id,
                             const char *local_path,
                             void (*cb)(void *, int), void *ud);
 
+void telegram_send_photo(telegram_ctx_t *tg, const char *chat_id,
+                         const unsigned char *jpeg_data, size_t jpeg_size,
+                         void (*cb)(void *, int), void *ud);
+
 #endif

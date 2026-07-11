@@ -6,6 +6,7 @@
 #include <string.h>
 #include <ctype.h>
 #include "totp.h"
+#include "render.h"
 
 #define FLUSH_THRESHOLD 4000
 #define DEBOUNCE_MS 300
@@ -76,6 +77,7 @@ void bot_init(bot_ctx_t *b, app_t *app) {
     b->cap = 0;
     b->debounce_active = 0;
     b->strip_state = ST_NORMAL;
+    b->vt = vterm_create();
     uv_timer_init(app->loop, &b->debounce);
     b->debounce.data = b;
 }
@@ -95,8 +97,14 @@ static void bot_ensure(bot_ctx_t *b, size_t extra) {
 
 void bot_on_output(app_t *app, const char *data, size_t len) {
     bot_ctx_t *b = &app->bot;
+    size_t clen;
     char *clean = (char *)malloc(len ? len : 1);
-    size_t clen = strip_ansi(&b->strip_state, data, len, clean, len);
+    if (app->image_mode) {
+        memcpy(clean, data, len);
+        clen = len;
+    } else {
+        clen = strip_ansi(&b->strip_state, data, len, clean, len);
+    }
     if (clen == 0) {
         free(clean);
         return;
@@ -107,7 +115,8 @@ void bot_on_output(app_t *app, const char *data, size_t len) {
     b->buf[b->len] = '\0';
     free(clean);
 
-    if (b->len >= FLUSH_THRESHOLD) {
+    size_t threshold = app->image_mode ? (1024 * 1024) : FLUSH_THRESHOLD;
+    if (b->len >= threshold) {
         bot_flush(app);
     } else {
         uv_timer_start(&b->debounce, bot_debounce_cb, DEBOUNCE_MS, 0);
@@ -149,10 +158,21 @@ void bot_flush(app_t *app) {
 
     if (send_len == 0) return;
 
-    char temp = b->buf[send_len];
-    b->buf[send_len] = '\0';
-    telegram_send_message(&app->tg, app->last_chat_id, b->buf, 1, NULL, NULL);
-    b->buf[send_len] = temp;
+    if (app->image_mode) {
+        vterm_process(b->vt, b->buf, send_len);
+        unsigned char *jpeg_data = NULL;
+        unsigned long jpeg_size = 0;
+        vterm_render_jpeg(b->vt, &jpeg_data, &jpeg_size);
+        if (jpeg_data) {
+            telegram_send_photo(&app->tg, app->last_chat_id, jpeg_data, jpeg_size, NULL, NULL);
+        }
+        vterm_clear_screen(b->vt);
+    } else {
+        char temp = b->buf[send_len];
+        b->buf[send_len] = '\0';
+        telegram_send_message(&app->tg, app->last_chat_id, b->buf, 1, NULL, NULL);
+        b->buf[send_len] = temp;
+    }
     
     size_t remaining = b->len - send_len;
     if (remaining > 0) {
@@ -204,6 +224,21 @@ void bot_handle_message(app_t *app, const char *chat_id, const char *text) {
     if (strcmp(text, "/restart") == 0) {
         shell_restart(&app->shell);
         telegram_send_message(&app->tg, chat_id, "Shell restarted.", 0, NULL, NULL);
+        return;
+    }
+
+    if (strcmp(text, "/image_on") == 0) {
+        app->image_mode = 1;
+        vterm_reset(app->bot.vt);
+        shell_restart(&app->shell);
+        telegram_send_message(&app->tg, chat_id, "Color Shell Mode enabled. Shell restarted.", 0, NULL, NULL);
+        return;
+    }
+
+    if (strcmp(text, "/image_off") == 0) {
+        app->image_mode = 0;
+        shell_restart(&app->shell);
+        telegram_send_message(&app->tg, chat_id, "Color Shell Mode disabled. Shell restarted.", 0, NULL, NULL);
         return;
     }
 
@@ -269,6 +304,10 @@ void bot_stop(bot_ctx_t *b) {
     if (b->debounce_active) {
         uv_timer_stop(&b->debounce);
         b->debounce_active = 0;
+    }
+    if (b->vt) {
+        vterm_free(b->vt);
+        b->vt = NULL;
     }
     free(b->buf);
     b->buf = NULL;

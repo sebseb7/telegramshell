@@ -13,6 +13,7 @@ typedef struct app_s {
     shell_ctx_t shell;
     bot_ctx_t bot;
     const char *token;
+    int image_mode;
     const char *allowed_chat_id;
     const char *totp_secret;
     char *last_chat_id;

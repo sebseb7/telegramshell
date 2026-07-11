@@ -71,6 +71,11 @@ static void check_multi_done(curl_uv_t *cu) {
     }
 }
 
+static void on_poll_close(uv_handle_t *handle) {
+    curl_poll_t *cp = (curl_poll_t *)handle;
+    free(cp);
+}
+
 static void curl_poll_cb(uv_poll_t *p, int status, int events) {
     (void)status;
     curl_poll_t *cp = (curl_poll_t *)p;
@@ -80,8 +85,12 @@ static void curl_poll_cb(uv_poll_t *p, int status, int events) {
     if (events & UV_WRITABLE)
         action |= CURL_CSELECT_OUT;
     int running = 0;
-    curl_multi_socket_action(cp->cu->multi, cp->fd, action, &running);
-    check_multi_done(cp->cu);
+
+    curl_uv_t *cu = cp->cu;
+    curl_socket_t fd = cp->fd;
+
+    curl_multi_socket_action(cu->multi, fd, action, &running);
+    check_multi_done(cu);
 }
 
 static int curl_socket_cb(CURL *easy, curl_socket_t s, int action,
@@ -93,7 +102,7 @@ static int curl_socket_cb(CURL *easy, curl_socket_t s, int action,
     if (action == CURL_POLL_REMOVE) {
         if (cp) {
             uv_poll_stop(&cp->poll);
-            free(cp);
+            uv_close((uv_handle_t *)&cp->poll, on_poll_close);
         }
         return 0;
     }

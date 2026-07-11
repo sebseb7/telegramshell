@@ -217,7 +217,12 @@ void bot_handle_message(app_t *app, const char *chat_id, const char *text) {
             "Send shell commands and I will stream output back here.\n"
             "/restart — restart the shell session.\n"
             "/ctrl_c — send Ctrl-C (SIGINT) to the shell.\n"
-            "/ctrl_z — send Ctrl-Z (SIGTSTP) to the shell.", 0, NULL, NULL);
+            "/ctrl_z — send Ctrl-Z (SIGTSTP) to the shell.\n"
+            "/image_on — enable color shell mode (renders as image).\n"
+            "/image_off — disable color shell mode.\n"
+            "/download <file> — download file from home directory.\n"
+            "/up, /down, /left, /right, /tab — send special keys.\n"
+            "/f1 through /f10 — send function keys.", 0, NULL, NULL);
         return;
     }
 
@@ -253,6 +258,23 @@ void bot_handle_message(app_t *app, const char *chat_id, const char *text) {
         telegram_send_message(&app->tg, chat_id, "Sent Ctrl-Z (SIGTSTP).", 0, NULL, NULL);
         return;
     }
+
+    if (strcmp(text, "/up") == 0) { shell_write(&app->shell, "\x1b[A", 3); return; }
+    if (strcmp(text, "/down") == 0) { shell_write(&app->shell, "\x1b[B", 3); return; }
+    if (strcmp(text, "/right") == 0) { shell_write(&app->shell, "\x1b[C", 3); return; }
+    if (strcmp(text, "/left") == 0) { shell_write(&app->shell, "\x1b[D", 3); return; }
+    if (strcmp(text, "/tab") == 0) { shell_write(&app->shell, "\t", 1); return; }
+
+    if (strcmp(text, "/f1") == 0) { shell_write(&app->shell, "\x1bOP", 3); return; }
+    if (strcmp(text, "/f2") == 0) { shell_write(&app->shell, "\x1bOQ", 3); return; }
+    if (strcmp(text, "/f3") == 0) { shell_write(&app->shell, "\x1bOR", 3); return; }
+    if (strcmp(text, "/f4") == 0) { shell_write(&app->shell, "\x1bOS", 3); return; }
+    if (strcmp(text, "/f5") == 0) { shell_write(&app->shell, "\x1b[15~", 5); return; }
+    if (strcmp(text, "/f6") == 0) { shell_write(&app->shell, "\x1b[17~", 5); return; }
+    if (strcmp(text, "/f7") == 0) { shell_write(&app->shell, "\x1b[18~", 5); return; }
+    if (strcmp(text, "/f8") == 0) { shell_write(&app->shell, "\x1b[19~", 5); return; }
+    if (strcmp(text, "/f9") == 0) { shell_write(&app->shell, "\x1b[20~", 5); return; }
+    if (strcmp(text, "/f10") == 0) { shell_write(&app->shell, "\x1b[21~", 5); return; }
 
     if (strncmp(text, "/download", 9) == 0) {
         const char *arg = text + 9;
